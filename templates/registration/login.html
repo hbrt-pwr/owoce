@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Logowanie{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Logowanie</h1>
+  {% if form.errors %}<div class="msg msg-error">Nieprawidłowa nazwa użytkownika lub hasło.</div>{% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <label>Nazwa użytkownika {{ form.username }}</label>
+    <label>Hasło {{ form.password }}</label>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button>Zaloguj</button>
+  </form>
+  <p>Nie masz konta? <a href="{% url 'signup' %}">Zarejestruj się</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,1 @@
+{% load static %}{% with img=fruit.main_image %}{% if img %}<img class="{{ cls }}" src="{{ img.image.url }}" alt="{{ fruit.name }}{% if img.caption %} – {{ img.caption }}{% endif %}" loading="lazy">{% else %}<img class="{{ cls }}" src="{% static 'placeholder.svg' %}" alt="{{ fruit.name }} – brak zdjęcia">{% endif %}{% endwith %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Rejestracja{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Załóż konto</h1>
+  <form method="post" class="stacked">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button>Zarejestruj</button>
+  </form>
+  <p>Masz już konto? <a href="{% url 'login' %}">Zaloguj się</a></p>
+</div>
+{% endblock %}

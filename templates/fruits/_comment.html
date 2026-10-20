@@ -1,0 +1,11 @@
+<div class="item-head">
+  <a href="{% url 'profile' c.user.username %}"><strong>{{ c.user.username }}</strong></a>
+  {% if c.user.is_staff %}<span class="pill admin">admin</span>{% endif %}
+  <small class="muted">{{ c.created_at|date:"j E Y, H:i" }}</small>
+  {% if user == c.user or user.is_staff %}
+    <form method="post" action="{% url 'delete_comment' c.pk %}" class="inline">{% csrf_token %}
+      <button class="link danger" onclick="return confirm('Usunąć komentarz?')">usuń</button>
+    </form>
+  {% endif %}
+</div>
+<p>{{ c.text|linebreaksbr }}</p>

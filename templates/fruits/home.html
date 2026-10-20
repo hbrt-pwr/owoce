@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load fruit_extras %}
+{% block title %}Ranking{% endblock %}
+{% block content %}
+<h1>Ostateczna lista dobrych i złych owoców</h1>
+<p class="muted">Ranking tworzą wyłącznie oceny zalogowanych użytkowników. Wynik owocu to średnia ze wszystkich ocen (0–100).</p>
+
+<form method="get" class="filters">
+  <input type="search" name="q" value="{{ query }}" placeholder="Szukaj owocu…">
+  <select name="kategoria">
+    <option value="">Wszystkie kategorie</option>
+    {% for c in nav_categories %}<option value="{{ c.slug }}" {% if category == c %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+  </select>
+  <button>Filtruj</button>
+  {% if query or category %}<a href="{% url 'home' %}">Wyczyść</a>{% endif %}
+</form>
+
+{% for tier in tiers %}
+  <section class="tier tier-{{ tier.key }}">
+    <h2>{{ tier.label }}</h2>
+    <ol class="ranking">
+      {% for fruit in tier.fruits %}
+        <li>
+          <span class="pos">{% if fruit.position %}#{{ fruit.position }}{% else %}–{% endif %}</span>
+          <a href="{{ fruit.get_absolute_url }}">{% include "fruits/_thumb.html" with fruit=fruit cls="thumb" %}</a>
+          <span class="info">
+            <a href="{{ fruit.get_absolute_url }}"><strong>{{ fruit.name }}</strong></a>
+            {% if fruit.tagline %}<em class="muted">„{{ fruit.tagline }}”</em>{% endif %}
+            <small class="muted">{% for c in fruit.categories.all %}{{ c.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</small>
+          </span>
+          {% if fruit.score_display is not None %}
+            <span class="score">{{ fruit.score_display }}</span>
+            <span class="verdict">{{ fruit.verdict }}<br><small class="muted">{{ fruit.num_ratings|pl_plural:"ocena,oceny,ocen" }}</small></span>
+          {% else %}
+            <span class="score none">—</span>
+            <span class="verdict muted">Brak ocen</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+{% empty %}
+  <p>Nie znaleziono owoców.</p>
+{% endfor %}
+{% endblock %}

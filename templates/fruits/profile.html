@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ profile_user.username }}{% endblock %}
+{% block content %}
+<h1>👤 {{ profile_user.username }} {% if profile_user.is_staff %}<span class="pill admin">admin</span>{% endif %}</h1>
+<p class="muted">Dołączył(a): {{ profile_user.date_joined|date:"j E Y" }} · ocen: {{ ratings|length }} · komentarzy: {{ num_comments }}</p>
+
+<h2>Ranking według {{ profile_user.username }}</h2>
+<ol class="ranking">
+  {% for r in ratings %}
+    <li>
+      <span class="pos">#{{ forloop.counter }}</span>
+      {% include "fruits/_thumb.html" with fruit=r.fruit cls="thumb" %}
+      <span class="info"><a href="{{ r.fruit.get_absolute_url }}"><strong>{{ r.fruit.name }}</strong></a>
+        {% if r.review %}<small class="muted">{{ r.review|truncatechars:80 }}</small>{% endif %}</span>
+      <span class="score">{{ r.score }}</span>
+      <span class="verdict">{{ r.verdict }}</span>
+    </li>
+  {% empty %}
+    <p class="muted">Ten użytkownik nie ocenił jeszcze żadnego owocu.</p>
+  {% endfor %}
+</ol>
+{% endblock %}

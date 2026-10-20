@@ -1,0 +1,12 @@
+[
+  {"fruit": "jablko", "file": "jablko-czerwone.jpg", "order": 0, "caption": "Czerwone jabłko",
+   "credit": "Abhijit Tembhekar, CC BY 2.0, Wikimedia Commons (File:Red_Apple.jpg)"},
+  {"fruit": "jablko", "file": "jablko-pink-lady.jpg", "order": 1, "caption": "Pink Lady w przekroju",
+   "credit": "fir0002 / flagstaffotos, GFDL 1.2, Wikimedia Commons (File:Pink_lady_and_cross_section.jpg)"},
+  {"fruit": "jablko", "file": "jablko-idared.jpg", "order": 2, "caption": "Idared na drzewie",
+   "credit": "CC BY-SA 3.0, Wikimedia Commons (File:Malus-Idared_on_tree.jpg)"},
+  {"fruit": "gruszka", "file": "gruszki.jpg", "order": 0, "caption": "Gruszki",
+   "credit": "Keith Weller, domena publiczna, Wikimedia Commons (File:Pears.jpg)"},
+  {"fruit": "banan", "file": "banany.jpg", "order": 0, "caption": "Kiść bananów",
+   "credit": "Augustus Binu, CC BY-SA 3.0, Wikimedia Commons (File:Bananas_white_background_DS.jpg)"}
+]

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Jak oceniamy{% endblock %}
+{% block content %}
+<h1>Jak oceniamy owoce</h1>
+<p>Każdy zalogowany użytkownik może ocenić każdy owoc <strong>raz</strong> (ocenę można później zmienić lub usunąć).
+Ocenia się 4 kryteria w skali 0–10, a wynik końcowy to średnia ważona przeliczona na skalę 0–100:</p>
+<table class="criteria">
+  <tr><th>Kryterium</th><th>Waga</th></tr>
+  {% for c in criteria %}<tr><td>{{ c.label }}</td><td class="num">{{ c.weight }}%</td></tr>{% endfor %}
+</table>
+<p>Wynik owocu w rankingu to średnia wyników wszystkich użytkowników.</p>
+
+<h2>Werdykty</h2>
+<table class="criteria">
+  <tr><th>Wynik od</th><th>Werdykt</th></tr>
+  {% for threshold, label in verdicts %}<tr><td class="num">{{ threshold }}</td><td>{{ label }}</td></tr>{% endfor %}
+</table>
+<p class="muted">Grupy w rankingu: 70+ „Najlepsze owoce”, 40–69 „Przeciętne owoce”, poniżej 40 „Owocowe piekło”.</p>
+{% endblock %}

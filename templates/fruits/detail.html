@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load fruit_extras %}
+{% block title %}{{ fruit.name }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'home' %}">← Wróć do rankingu</a></p>
+
+<div class="fruit-head">
+  {% include "fruits/_thumb.html" with fruit=fruit cls="main-photo" %}
+  <div>
+    <h1>{{ fruit.name }}</h1>
+    {% if fruit.tagline %}<p class="muted"><em>„{{ fruit.tagline }}”</em></p>{% endif %}
+    <p class="muted">{% for c in fruit.categories.all %}<a href="{% url 'home' %}?kategoria={{ c.slug }}">{{ c.name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  </div>
+  <div class="score-box">
+    <div class="score big">{% if score is not None %}{{ score }}{% else %}—{% endif %}</div>
+    <div>{{ verdict }}</div>
+    <small class="muted">{{ fruit.num_ratings|pl_plural:"ocena,oceny,ocen" }}</small>
+  </div>
+</div>
+
+{% if fruit.description %}<p>{{ fruit.description|linebreaksbr }}</p>{% endif %}
+
+{% with images=fruit.images.all %}{% if images %}
+<section class="gallery">
+  {% for img in images %}
+    <figure>
+      <a href="{{ img.image.url }}" target="_blank" rel="noopener"><img src="{{ img.image.url }}" alt="{{ fruit.name }}{% if img.caption %} – {{ img.caption }}{% endif %}" loading="lazy"></a>
+      {% if img.caption or img.credit %}<figcaption>{{ img.caption }}{% if img.credit %}<br><small class="muted">{{ img.credit }}</small>{% endif %}</figcaption>{% endif %}
+    </figure>
+  {% endfor %}
+</section>
+{% endif %}{% endwith %}
+
+<div class="grid">
+  <section class="card">
+    <h2>Średnie w kryteriach</h2>
+    <table class="criteria">
+      {% for c in criteria %}
+        <tr>
+          <td>{{ c.label }} <small class="muted">({{ c.weight }}%)</small></td>
+          <td class="num">{% if c.avg is not None %}{{ c.avg|floatformat:1 }}/10{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>{% if my_rating %}Twoja ocena: {{ my_rating.score }}/100{% else %}Oceń ten owoc{% endif %}</h2>
+    {% if user.is_authenticated %}
+      <form method="post" action="{% url 'rate' fruit.slug %}">
+        {% csrf_token %}
+        <div class="rating-fields">
+          {% for field in rating_form %}{% if field.name != "review" %}
+            <label>{{ field.label|capfirst }} {{ field }}</label>
+          {% endif %}{% endfor %}
+        </div>
+        {{ rating_form.review }}
+        <button>{% if my_rating %}Zaktualizuj ocenę{% else %}Zapisz ocenę{% endif %}</button>
+      </form>
+      {% if my_rating %}
+        <form method="post" action="{% url 'delete_rating' my_rating.pk %}" class="inline">{% csrf_token %}
+          <button class="link danger" onclick="return confirm('Usunąć Twoją ocenę?')">Usuń moją ocenę</button>
+        </form>
+      {% endif %}
+    {% else %}
+      <p><a href="{% url 'login' %}?next={{ request.path }}">Zaloguj się</a> lub <a href="{% url 'signup' %}">załóż konto</a>, aby ocenić.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section>
+  <h2>Oceny użytkowników ({{ ratings|length }})</h2>
+  {% for r in ratings %}
+    <div class="item">
+      <div class="item-head">
+        <a href="{% url 'profile' r.user.username %}"><strong>{{ r.user.username }}</strong></a>
+        <span class="pill">{{ r.score }}/100 · {{ r.verdict }}</span>
+        <small class="muted">smak {{ r.taste }} · tekstura {{ r.texture }} · soczystość {{ r.juiciness }} · wygląd {{ r.look }} · {{ r.updated_at|date:"j E Y, H:i" }}</small>
+        {% if user.is_staff and r.user != user %}
+          <form method="post" action="{% url 'delete_rating' r.pk %}" class="inline">{% csrf_token %}
+            <button class="link danger" onclick="return confirm('Usunąć tę ocenę (moderacja)?')">usuń</button>
+          </form>
+        {% endif %}
+      </div>
+      {% if r.review %}<p>{{ r.review|linebreaksbr }}</p>{% endif %}
+    </div>
+  {% empty %}
+    <p class="muted">Nikt jeszcze nie ocenił tego owocu. Bądź pierwszy!</p>
+  {% endfor %}
+</section>
+
+<section id="komentarze">
+  <h2>Dyskusja</h2>
+  {% for c in comments %}
+    <div class="item">
+      {% include "fruits/_comment.html" with c=c %}
+      <div class="replies">
+        {% for reply in c.replies.all %}
+          <div class="item reply">{% include "fruits/_comment.html" with c=reply %}</div>
+        {% endfor %}
+        {% if user.is_authenticated %}
+          <details>
+            <summary>Odpowiedz</summary>
+            <form method="post" action="{% url 'add_comment' fruit.slug %}">
+              {% csrf_token %}
+              <input type="hidden" name="parent_id" value="{{ c.pk }}">
+              <textarea name="text" rows="2" required placeholder="Twoja odpowiedź…"></textarea>
+              <button>Wyślij odpowiedź</button>
+            </form>
+          </details>
+        {% endif %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="muted">Brak komentarzy.</p>
+  {% endfor %}
+
+  {% if user.is_authenticated %}
+    <form method="post" action="{% url 'add_comment' fruit.slug %}" class="card">
+      {% csrf_token %}
+      {{ comment_form.text }}
+      <button>Dodaj komentarz</button>
+    </form>
+  {% else %}
+    <p><a href="{% url 'login' %}?next={{ request.path }}">Zaloguj się</a>, aby komentować.</p>
+  {% endif %}
+</section>
+{% endblock %}
