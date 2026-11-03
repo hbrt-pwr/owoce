@@ -117,3 +117,32 @@ class FruitSiteTests(TestCase):
         self.client.login(username="alice", password=PW)
         self.client.post(reverse("logout"))
         self.assertNotContains(self.client.get(reverse("home")), "Wyloguj")
+
+
+class CloudReadinessTests(TestCase):
+    """Elementy potrzebne do działania za load balancerem (L3)."""
+
+    def test_health_check_ok_even_for_unknown_host(self):
+        # sonda load balancera przychodzi na prywatny IP instancji, spoza ALLOWED_HOSTS
+        r = self.client.get("/healthz/", HTTP_HOST="10.0.1.4")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"status": "ok", "db": True})
+
+    def test_other_pages_still_check_host(self):
+        self.assertEqual(self.client.get("/", HTTP_HOST="zly-host.example").status_code, 400)
+
+    def test_https_from_load_balancer_header(self):
+        # TLS kończy się na load balancerze; aplikacja wie o HTTPS z nagłówka X-Forwarded-Proto
+        with override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https")):
+            r = self.client.get(reverse("home"), HTTP_X_FORWARDED_PROTO="https")
+            self.assertTrue(r.wsgi_request.is_secure())
+
+    def test_small_photo_is_not_reencoded(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            buf = io.BytesIO()
+            Image.new("RGB", (400, 300), "green").save(buf, "PNG")
+            img = FruitImage.objects.create(
+                fruit=Fruit.objects.get(slug="jablko"), image=SimpleUploadedFile("m.png", buf.getvalue(), "image/png")
+            )
+            with open(img.image.path, "rb") as fh:
+                self.assertEqual(fh.read(), buf.getvalue())

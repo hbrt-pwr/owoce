@@ -28,8 +28,11 @@ class Command(BaseCommand):
             if fruit.images.filter(caption=entry["caption"]).exists():
                 continue
             with open(SAMPLE_DIR / entry["file"], "rb") as fh:
-                img = FruitImage(fruit=fruit, caption=entry["caption"], credit=entry["credit"], order=entry.get("order", 0))
-                img.image.save(entry["file"], File(fh), save=True)
+                img = FruitImage(
+                    fruit=fruit, caption=entry["caption"], credit=entry["credit"], order=entry.get("order", 0),
+                    image=File(fh, name=entry["file"]),
+                )
+                img.save()
             added += 1
             self.stdout.write(f"+ {fruit.name}: {entry['caption']}")
         self.stdout.write(self.style.SUCCESS(f"Dodano zdjęć: {added}"))

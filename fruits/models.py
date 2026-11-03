@@ -107,19 +107,30 @@ class FruitImage(models.Model):
         return f"{self.fruit}: {self.caption or self.image.name}"
 
     def save(self, *args, **kwargs):
+        # Zmniejszamy nowy plik w pamięci, zanim trafi do magazynu – działa tak samo dla folderu media/
+        # i dla Azure Blob Storage (tam nie ma ścieżki na dysku, którą można by nadpisać po zapisie).
+        if self.image and not self.image._committed:
+            self._shrink()
         super().save(*args, **kwargs)
-        self._shrink()
 
     def _shrink(self):
+        from io import BytesIO
+
+        from django.core.files.base import ContentFile
         from PIL import Image, ImageOps
 
-        path = self.image.path
-        with Image.open(path) as img:
+        upload = self.image.file
+        upload.seek(0)
+        with Image.open(upload) as img:
             if max(img.size) <= self.MAX_SIZE:
+                upload.seek(0)
                 return
+            fmt = img.format or "JPEG"
             img = ImageOps.exif_transpose(img)
             img.thumbnail((self.MAX_SIZE, self.MAX_SIZE))
-            img.save(path, quality=85)
+            out = BytesIO()
+            img.save(out, fmt, quality=85)
+        self.image = ContentFile(out.getvalue(), name=self.image.name)
 
 
 class Rating(models.Model):
