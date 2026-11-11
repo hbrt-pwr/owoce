@@ -1,7 +1,7 @@
-# FruitRankings 🍎
+# Owocownik 🍎
 
 Prosta strona do oceniania owoców (wzorowana na applerankings.com).
-Stack: **Python 3.12 + Django 5.2 + SQLite + Pillow (zdjęcia)** — tylko localhost.
+Stack: **Python 3.12 + Django 5.2 + Pillow (zdjęcia)**; lokalnie SQLite, w Azure PostgreSQL (Container Apps).
 
 ## Funkcje
 - Rejestracja, logowanie i wylogowanie (sesje Django zapisywane w bazie, ważne 14 dni).
@@ -27,13 +27,17 @@ Strona: http://localhost:8000 · Panel admina: http://localhost:8000/admin/
 
 Testy: `.\.venv\Scripts\python manage.py test fruits`
 
-## Chmura (L3)
+## Chmura
 Projekt architektury (load balancer ze skalowaniem, PostgreSQL, domena, TLS na load balancerze): [docs/L3-architektura.md](docs/L3-architektura.md).
 Lokalnie nic się nie zmienia. W chmurze aplikacja działa z obrazu `Dockerfile` (gunicorn), a konfigurację bierze ze zmiennych środowiskowych – wzór w `.env.example`. Sonda dla load balancera: `GET /healthz/`.
+
+Wdrożenie w Azure (Container Apps + PostgreSQL Flexible Server), skrypty w `deploy/azure/`: [docs/wdrozenie-azure.md](docs/wdrozenie-azure.md).
 
 ## Struktura
 - `config/` – ustawienia (zmienne środowiskowe dla chmury) i główne URL-e
 - `fruits/health.py` – sonda `/healthz/` dla load balancera
+- `fruits/management/commands/init_db.py` – migracje + przykładowe zdjęcia przy wdrożeniu
+- `deploy/azure/` – skrypty wdrożenia w Azure
 - `fruits/models.py` – Category, Fruit, Rating, Comment + logika wyniku i werdyktów
 - `fruits/views.py` – ranking, szczegóły owocu, ocenianie, komentarze, rejestracja, profil
 - `fruits/migrations/0002_seed_fruits.py` – początkowa lista owoców

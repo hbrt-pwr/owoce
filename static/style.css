@@ -55,6 +55,18 @@ textarea { width: 100%; margin: 6px 0; }
 .narrow label, .stacked p { display: block; margin-bottom: 10px; }
 .narrow input:not([type=hidden]) { display: block; width: 100%; margin-top: 4px; }
 .stacked .helptext, .stacked ul { font-size: .8rem; color: #777; }
+.stacked .helptext { display: block; margin-top: 2px; }
+.stacked .errorlist { color: #a00; padding-left: 18px; margin: 4px 0 0; }
+
+/* Wymogi hasła odhaczane na żywo (static/password-rules.js) */
+.stacked ul.pw-rules { list-style: none; padding: 0; margin: 0 0 14px; font-size: .85rem; }
+.pw-rules li { margin: 3px 0; padding-left: 22px; position: relative; }
+.pw-rules li::before { content: "○"; position: absolute; left: 4px; }
+.pw-rules li.ok { color: #2e7d32; }
+.pw-rules li.ok::before { content: "✔"; }
+.pw-rules li.bad { color: #b00020; }
+.pw-rules li.bad::before { content: "✘"; }
+.narrow .forgot { font-size: .9rem; margin: -4px 0 10px; text-align: right; }
 
 .criteria { border-collapse: collapse; width: 100%; max-width: 420px; }
 .criteria td, .criteria th { padding: 6px; border-bottom: 1px solid #eee; text-align: left; }

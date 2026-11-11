@@ -8,6 +8,7 @@
     {% csrf_token %}
     <label>Nazwa użytkownika {{ form.username }}</label>
     <label>Hasło {{ form.password }}</label>
+    <p class="forgot"><a href="{% url 'password_reset' %}">Nie pamiętasz hasła?</a></p>
     <input type="hidden" name="next" value="{{ next }}">
     <button>Zaloguj</button>
   </form>

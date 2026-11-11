@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}FruitRankings{% endblock %} – ranking owoców</title>
+  <title>{% block title %}Ranking owoców{% endblock %} – Owocownik</title>
   <link rel="stylesheet" href="{% static 'style.css' %}">
 </head>
 <body>
 <header class="topbar">
   <div class="wrap topbar-inner">
-    <a class="logo" href="{% url 'home' %}">🍎 FruitRankings</a>
+    <a class="logo" href="{% url 'home' %}">🍎 Owocownik</a>
     <nav class="nav">
       <select onchange="if (this.value) location.href = this.value" aria-label="Wybierz owoc">
         <option value="">Wybierz owoc…</option>
@@ -35,6 +35,6 @@
   {% block content %}{% endblock %}
 </main>
 
-<footer class="wrap footer">FruitRankings · ostateczna lista dobrych i złych owoców · wersja lokalna</footer>
+<footer class="wrap footer">Owocownik · ostateczna lista dobrych i złych owoców</footer>
 </body>
 </html>

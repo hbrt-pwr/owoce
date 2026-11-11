@@ -1,4 +1,4 @@
-# Obraz aplikacji FruitRankings – ten sam obraz uruchamia każda instancja za load balancerem.
+# Obraz aplikacji Owocownik – ten sam obraz uruchamia każda instancja za load balancerem.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

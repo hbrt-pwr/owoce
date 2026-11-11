@@ -8,11 +8,18 @@ SCORE_CHOICES = [(i, str(i)) for i in range(10, -1, -1)]
 
 
 class SignUpForm(UserCreationForm):
-    email = forms.EmailField(label="E-mail", required=False)
+    # Wymagany i unikalny – na ten adres przychodzi link do resetu hasła („Nie pamiętasz hasła?”).
+    email = forms.EmailField(label="E-mail")
 
     class Meta:
         model = User
         fields = ("username", "email")
+
+    def clean_email(self):
+        email = self.cleaned_data["email"]
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("Konto z tym adresem e-mail już istnieje.")
+        return email
 
 
 class RatingForm(forms.ModelForm):

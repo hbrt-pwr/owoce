@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("jak-oceniamy/", views.how_we_rate, name="how_we_rate"),
     path("rejestracja/", views.signup, name="signup"),
+    path("rejestracja/sprawdz-haslo/", views.password_check, name="password_check"),
     path("uzytkownik/<str:username>/", views.profile, name="profile"),
     path("owoc/<slug:slug>/", views.fruit_detail, name="fruit_detail"),
     path("owoc/<slug:slug>/ocen/", views.rate, name="rate"),

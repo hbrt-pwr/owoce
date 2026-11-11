@@ -1,4 +1,4 @@
-"""Ustawienia projektu FruitRankings.
+"""Ustawienia projektu Owocownik.
 
 Lokalnie (DEV) wszystko działa bez zmiennych środowiskowych: SQLite, DEBUG, zdjęcia w media/.
 W chmurze (L3/L4) konfiguracja przychodzi ze zmiennych środowiskowych – patrz docs/L3-architektura.md:
@@ -102,6 +102,24 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14
 SESSION_COOKIE_HTTPONLY = True
 
+# E-maile (link „Nie pamiętasz hasła?”). Serwer SMTP ze zmiennych środowiskowych; hasło SMTP trzymamy
+# w sekrecie Container Apps. Bez EMAIL_HOST wiadomości trafiają na standardowe wyjście – lokalnie link
+# do resetu widać w terminalu runserver, w Azure w logach aplikacji (nikt go nie dostanie mailem).
+if os.environ.get("EMAIL_HOST"):
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.environ["EMAIL_HOST"]
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_SSL = EMAIL_PORT == 465  # 465 = SSL od początku, 587 = STARTTLS
+    EMAIL_USE_TLS = not EMAIL_USE_SSL
+    EMAIL_TIMEOUT = 15
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "Owocownik <kontakt@owocownik.pl>")
+# Link „Nie pamiętasz hasła?” jest ważny godzinę (domyślnie w Django 3 dni).
+PASSWORD_RESET_TIMEOUT = 60 * 60
+
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "home"
@@ -129,15 +147,20 @@ STORAGES = {
     },
 }
 if os.environ.get("AZURE_ACCOUNT_NAME"):
-    STORAGES["default"] = {
-        "BACKEND": "storages.backends.azure_storage.AzureStorage",
-        "OPTIONS": {
-            "account_name": os.environ["AZURE_ACCOUNT_NAME"],
-            "account_key": os.environ.get("AZURE_ACCOUNT_KEY") or None,
-            "azure_container": os.environ.get("AZURE_CONTAINER", "media"),
-            "overwrite_files": False,
-        },
+    azure_options = {
+        "account_name": os.environ["AZURE_ACCOUNT_NAME"],
+        "azure_container": os.environ.get("AZURE_CONTAINER", "media"),
+        "overwrite_files": False,
     }
+    if os.environ.get("AZURE_ACCOUNT_KEY"):
+        azure_options["account_key"] = os.environ["AZURE_ACCOUNT_KEY"]
+    else:
+        # Bez klucza: aplikacja loguje się do Storage swoją tożsamością zarządzaną (Managed Identity)
+        # z rolą „Storage Blob Data Contributor” – w Azure nie ma żadnego klucza do przechowywania.
+        from azure.identity import DefaultAzureCredential
+
+        azure_options["token_credential"] = DefaultAzureCredential()
+    STORAGES["default"] = {"BACKEND": "storages.backends.azure_storage.AzureStorage", "OPTIONS": azure_options}
 
 # --- Aplikacja za load balancerem, który kończy TLS ---
 # Certyfikat jest na load balancerze (nie na serwerze aplikacji). Do aplikacji ruch idzie już po HTTP

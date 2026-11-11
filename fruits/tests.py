@@ -1,4 +1,7 @@
 import io
+import os
+import subprocess
+import sys
 import tempfile
 
 from django.contrib.auth.models import User
@@ -32,9 +35,17 @@ class FruitSiteTests(TestCase):
         self.assertContains(self.client.get(reverse("home") + "?kategoria=cytrusowe"), "Cytryna")
 
     def test_signup_logs_in(self):
-        r = self.client.post(reverse("signup"), {"username": "nowy", "password1": PW, "password2": PW})
+        r = self.client.post(reverse("signup"), {"username": "nowy", "email": "nowy@example.com",
+                                                 "password1": PW, "password2": PW})
         self.assertRedirects(r, reverse("home"))
         self.assertContains(self.client.get(reverse("home")), "Wyloguj")
+
+    def test_site_name_is_owocownik(self):
+        html = self.client.get(reverse("home")).content.decode()
+        self.assertIn("<title>Ranking – Owocownik</title>", html)
+        self.assertNotIn("FruitRankings", html)
+        self.assertNotIn("wersja lokalna", html)
+
 
     def test_anonymous_cannot_rate_or_comment(self):
         r = self.client.post(reverse("rate", args=["jablko"]), SCORES)
@@ -119,6 +130,83 @@ class FruitSiteTests(TestCase):
         self.assertNotContains(self.client.get(reverse("home")), "Wyloguj")
 
 
+class AccountTests(TestCase):
+    """Rejestracja z wymogami hasła na żywo i „Nie pamiętasz hasła?”."""
+
+    def test_signup_requires_unique_email(self):
+        User.objects.create_user("ala", email="Ala@example.com", password=PW)
+        data = {"username": "nowy", "password1": PW, "password2": PW}
+        self.assertFormError(self.client.post(reverse("signup"), data).context["form"], "email", "To pole jest wymagane.")
+        r = self.client.post(reverse("signup"), {**data, "email": "ala@EXAMPLE.com"})
+        self.assertFormError(r.context["form"], "email", "Konto z tym adresem e-mail już istnieje.")
+        self.assertFalse(User.objects.filter(username="nowy").exists())
+
+    def test_signup_page_lists_password_rules(self):
+        html = self.client.get(reverse("signup")).content.decode()
+        self.assertIn('class="pw-rules"', html)
+        self.assertIn("co najmniej 8 znaków", html)
+        self.assertIn("password-rules.js", html)
+
+    def test_password_check_reports_unmet_rules(self):
+        url = reverse("password_check")
+        # kolejność jak w AUTH_PASSWORD_VALIDATORS: podobieństwo, długość, popularne, same cyfry
+        self.assertEqual(self.client.post(url, {"password": "73915"}).json(), {"ok": [True, False, True, False]})
+        self.assertEqual(self.client.post(url, {"password": "password"}).json(), {"ok": [True, True, False, True]})
+        r = self.client.post(url, {"password": "bananowiec", "username": "bananowiec"})
+        self.assertEqual(r.json(), {"ok": [False, True, True, True]})
+        self.assertEqual(self.client.post(url, {"password": PW}).json(), {"ok": [True, True, True, True]})
+        self.assertEqual(self.client.get(url).status_code, 405)  # hasło tylko w treści POST
+
+    def test_password_check_requires_csrf(self):
+        client = self.client_class(enforce_csrf_checks=True)
+        self.assertEqual(client.post(reverse("password_check"), {"password": "x"}).status_code, 403)
+
+    def test_login_page_links_to_password_reset(self):
+        self.assertContains(self.client.get(reverse("login")), reverse("password_reset"))
+
+    def test_password_reset_flow(self):
+        from django.core import mail
+
+        User.objects.create_user("ala", email="ala@example.com", password=PW)
+        r = self.client.post(reverse("password_reset"), {"email": "ala@example.com"})
+        self.assertRedirects(r, reverse("password_reset_done"))
+        self.assertEqual(len(mail.outbox), 1)
+        msg = mail.outbox[0]
+        self.assertEqual(msg.subject, "Owocownik – ustawienie nowego hasła")
+        self.assertEqual(msg.to, ["ala@example.com"])
+        link = next(line for line in msg.body.splitlines() if "/konto/reset/" in line).strip()
+        self.assertTrue(link.startswith("http://testserver/konto/reset/"))
+
+        r = self.client.get(link, follow=True)  # Django przekierowuje na adres z „set-password” zamiast tokenu
+        self.assertContains(r, "Ustaw nowe hasło")
+        self.assertContains(r, 'class="pw-rules"')
+        new_pw = "Nowe-Owocowe-Haslo-456"
+        r = self.client.post(r.redirect_chain[-1][0], {"new_password1": new_pw, "new_password2": new_pw})
+        self.assertRedirects(r, reverse("password_reset_complete"))
+        self.assertTrue(self.client.login(username="ala", password=new_pw))
+
+    def test_password_reset_unknown_email_sends_nothing_but_looks_the_same(self):
+        from django.core import mail
+
+        r = self.client.post(reverse("password_reset"), {"email": "nikt@example.com"})
+        self.assertRedirects(r, reverse("password_reset_done"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_link_expires_after_one_hour(self):
+        from datetime import datetime, timedelta
+        from unittest import mock
+
+        from django.contrib.auth.tokens import PasswordResetTokenGenerator, default_token_generator
+
+        user = User.objects.create_user("ala", email="ala@example.com", password=PW)
+        start = datetime(2026, 11, 11, 12, 0, 0)
+        with mock.patch.object(PasswordResetTokenGenerator, "_now", return_value=start):
+            token = default_token_generator.make_token(user)
+        for minutes, valid in [(59, True), (61, False)]:
+            with mock.patch.object(PasswordResetTokenGenerator, "_now", return_value=start + timedelta(minutes=minutes)):
+                self.assertEqual(default_token_generator.check_token(user, token), valid, minutes)
+
+
 class CloudReadinessTests(TestCase):
     """Elementy potrzebne do działania za load balancerem (L3)."""
 
@@ -136,6 +224,18 @@ class CloudReadinessTests(TestCase):
         with override_settings(SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https")):
             r = self.client.get(reverse("home"), HTTP_X_FORWARDED_PROTO="https")
             self.assertTrue(r.wsgi_request.is_secure())
+
+    def test_blob_storage_uses_managed_identity_without_key(self):
+        # w Azure Container Apps zdjęcia zapisujemy tożsamością zarządzaną, bez klucza Storage
+        env = {**os.environ, "AZURE_ACCOUNT_NAME": "owocetest", "DJANGO_SETTINGS_MODULE": "config.settings"}
+        env.pop("AZURE_ACCOUNT_KEY", None)
+        code = (
+            "from django.conf import settings as s; o = s.STORAGES['default']['OPTIONS']; "
+            "print(s.STORAGES['default']['BACKEND'], 'account_key' in o, type(o['token_credential']).__name__)"
+        )
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = subprocess.run([sys.executable, "-c", code], env=env, cwd=project_dir, capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.split(), ["storages.backends.azure_storage.AzureStorage", "False", "DefaultAzureCredential"])
 
     def test_small_photo_is_not_reencoded(self):
         with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):

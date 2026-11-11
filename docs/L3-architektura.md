@@ -1,6 +1,6 @@
 # L3 – Projekt architektury infrastruktury (chmura)
 
-Aplikacja: **FruitRankings** (Django 5.2, Python 3.12) – ranking owoców z logowaniem, ocenami i komentarzami.
+Aplikacja: **Owocownik** (Django 5.2, Python 3.12) – ranking owoców z logowaniem, ocenami i komentarzami.
 Chmura: **Microsoft Azure** (region Poland Central, konto Azure for Students). Odpowiedniki w AWS – na końcu.
 
 ## Wymagania L3 i jak je spełniamy

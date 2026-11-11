@@ -1,9 +1,10 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, password_validation
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Avg, Count, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -156,6 +157,26 @@ def signup(request):
         messages.success(request, f"Witaj, {user.username}! Konto utworzone.")
         return redirect("home")
     return render(request, "registration/signup.html", {"form": form})
+
+
+@require_POST
+def password_check(request):
+    """Które wymogi hasła są spełnione – dla listy odhaczanej na żywo przy rejestracji i resecie hasła.
+
+    POST (hasło nie trafia do adresu ani logów), chroniony CSRF jak każdy formularz.
+    Zwraca {"ok": [true/false, ...]} w kolejności AUTH_PASSWORD_VALIDATORS.
+    """
+    password = request.POST.get("password", "")
+    user = User(username=request.POST.get("username", ""), email=request.POST.get("email", ""))
+    ok = []
+    for validator in password_validation.get_default_password_validators():
+        try:
+            validator.validate(password, user)
+        except ValidationError:
+            ok.append(False)
+        else:
+            ok.append(True)
+    return JsonResponse({"ok": ok})
 
 
 def profile(request, username):

@@ -1,11 +1,35 @@
 {% extends "base.html" %}
+{% load fruit_extras %}
 {% block title %}Rejestracja{% endblock %}
 {% block content %}
 <div class="card narrow">
   <h1>Załóż konto</h1>
   <form method="post" class="stacked">
     {% csrf_token %}
-    {{ form.as_p }}
+    {{ form.non_field_errors }}
+    <p>
+      <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+      {{ form.username }}
+      <span class="helptext">Do 150 znaków: litery, cyfry i @ . + - _</span>
+      {{ form.username.errors }}
+    </p>
+    <p>
+      <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+      {{ form.email }}
+      <span class="helptext">Potrzebny, gdy zapomnisz hasła.</span>
+      {{ form.email.errors }}
+    </p>
+    <p>
+      <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+      {{ form.password1 }}
+      {{ form.password1.errors }}
+    </p>
+    <p>
+      <label for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+      {{ form.password2 }}
+      {{ form.password2.errors }}
+    </p>
+    {% password_rules form.password1 form.password2 %}
     <button>Zarejestruj</button>
   </form>
   <p>Masz już konto? <a href="{% url 'login' %}">Zaloguj się</a></p>
