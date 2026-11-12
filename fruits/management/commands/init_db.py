@@ -14,5 +14,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         call_command("migrate", interactive=False)
+        call_command("createcachetable")  # tabela cache "ratelimit" (wspólne limity żądań)
         call_command("load_sample_photos")
         self.stdout.write(self.style.SUCCESS("Baza gotowa."))

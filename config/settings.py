@@ -45,6 +45,8 @@ MIDDLEWARE = [
     # Musi być pierwszy: odpowiada sondzie load balancera przed sprawdzaniem nagłówka Host.
     "fruits.health.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    # Limit żądań na IP – przed sesją i bazą danych, żeby zalew żądań był odrzucany tanio (fruits/ratelimit.py).
+    "fruits.ratelimit.RateLimitMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -89,11 +91,26 @@ DATABASES = {
     )
 }
 
+# Cache: "default" w pamięci procesu (ogólny limit żądań na IP), "ratelimit" w bazie – wspólny dla wszystkich
+# instancji (limity logowania, rejestracji, resetu hasła). Tabelę tworzy `createcachetable` (robi to init_db).
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "ratelimit": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "ratelimit_cache",
+        "OPTIONS": {"MAX_ENTRIES": 20000},
+    },
+}
+RATELIMIT_ENABLED = os.environ.get("DJANGO_RATELIMIT", "1") == "1"
+
+# Polityka haseł: min. 10 znaków + wielka litera, mała litera, cyfra i znak specjalny.
+# Kolejność = kolejność punktów na liście wymogów przy rejestracji / resecie hasła.
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}},
+    {"NAME": "fruits.validators.CharacterClassValidator", "OPTIONS": {"kind": "upper"}},
+    {"NAME": "fruits.validators.CharacterClassValidator", "OPTIONS": {"kind": "lower"}},
+    {"NAME": "fruits.validators.CharacterClassValidator", "OPTIONS": {"kind": "digit"}},
+    {"NAME": "fruits.validators.CharacterClassValidator", "OPTIONS": {"kind": "symbol"}},
 ]
 
 # Sesje trzymane w bazie danych, ważne 2 tygodnie. Baza jest wspólna dla wszystkich instancji,
@@ -169,12 +186,15 @@ if os.environ.get("AZURE_ACCOUNT_NAME"):
 if os.environ.get("DJANGO_BEHIND_PROXY", "0" if DEBUG else "1") == "1":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
+    # Adres klienta dla limitu żądań: ostatni wpis X-Forwarded-For (dopisany przez ingress).
+    RATELIMIT_USE_X_FORWARDED_FOR = True
 
 if not DEBUG:
     # Przeglądarka zawsze rozmawia z nami po HTTPS (przekierowanie HTTP -> HTTPS robi load balancer).
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "3600"))
+    # HSTS: przeglądarka przez rok sama zamienia http:// na https:// (w Azure też ustawione zmienną środowiskową).
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", str(60 * 60 * 24 * 365)))
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Logi na standardowe wyjście – zbiera je platforma (Azure Monitor / Log Analytics), a nie plik na instancji.

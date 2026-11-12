@@ -59,7 +59,7 @@
     pw2.addEventListener("input", checkMatch);
     ["username", "email"].forEach(function (name) {
       var el = form.querySelector("[name=" + name + "]");
-      if (el) el.addEventListener("input", later); // podobieństwo do nazwy/e-maila
+      if (el) el.addEventListener("input", later); // na wypadek walidatorów zależnych od nazwy/e-maila
     });
     if (pw.value) check();
   });

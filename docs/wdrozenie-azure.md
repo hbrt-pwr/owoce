@@ -136,3 +136,7 @@ Subskrypcja Azure for Students często nie ma wolnych serwerów PostgreSQL w Pol
 - Baza ma publiczny adres z regułą „dostęp tylko z usług Azure” + TLS + losowe 32-znakowe hasło. Wersja docelowa:
   środowisko Container Apps w sieci wirtualnej (VNet) i baza z dostępem prywatnym (jak w L3).
 - Kontener `media` pozwala czytać pojedyncze pliki po adresie (zdjęcia owoców są publiczne), ale nie listować zawartości.
+- Brak WAF (Azure Front Door / Application Gateway WAF to ok. 35+ USD/mies.). Zamiast niego limit żądań w aplikacji
+  (`fruits/ratelimit.py`): ogólny 600 żądań/min na IP (pamięć procesu) i limity formularzy we wspólnym cache
+  w PostgreSQL (logowanie 10/5 min na konto, reset hasła 3/h na adres e-mail itd.). Adres klienta = ostatni wpis
+  `X-Forwarded-For` dopisany przez ingress. Wyłączenie awaryjne: zmienna `DJANGO_RATELIMIT=0`.

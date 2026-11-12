@@ -144,18 +144,38 @@ class AccountTests(TestCase):
     def test_signup_page_lists_password_rules(self):
         html = self.client.get(reverse("signup")).content.decode()
         self.assertIn('class="pw-rules"', html)
-        self.assertIn("co najmniej 8 znaków", html)
+        self.assertIn("co najmniej 10 znaków", html)
+        self.assertIn("co najmniej jedną wielką literę", html)
+        self.assertIn("co najmniej jeden znak specjalny", html)
         self.assertIn("password-rules.js", html)
 
     def test_password_check_reports_unmet_rules(self):
         url = reverse("password_check")
-        # kolejność jak w AUTH_PASSWORD_VALIDATORS: podobieństwo, długość, popularne, same cyfry
-        self.assertEqual(self.client.post(url, {"password": "73915"}).json(), {"ok": [True, False, True, False]})
-        self.assertEqual(self.client.post(url, {"password": "password"}).json(), {"ok": [True, True, False, True]})
-        r = self.client.post(url, {"password": "bananowiec", "username": "bananowiec"})
-        self.assertEqual(r.json(), {"ok": [False, True, True, True]})
-        self.assertEqual(self.client.post(url, {"password": PW}).json(), {"ok": [True, True, True, True]})
+
+        def check(pw):
+            return self.client.post(url, {"password": pw}).json()["ok"]
+
+        # kolejność jak w AUTH_PASSWORD_VALIDATORS: długość ≥ 10, wielka, mała, cyfra, znak specjalny
+        self.assertEqual(check("abc"), [False, False, True, False, False])
+        self.assertEqual(check("abcdefghij"), [True, False, True, False, False])
+        self.assertEqual(check("ABCDEFGHIJ1"), [True, True, False, True, False])
+        self.assertEqual(check("Abcdefghi1"), [True, True, True, True, False])
+        self.assertEqual(check("Żółć-gęśla1"), [True, True, True, True, True])  # polskie litery też się liczą
+        self.assertEqual(check("Abc defgh1"), [True, True, True, True, False])  # spacja to nie znak specjalny
+        self.assertEqual(check(PW), [True, True, True, True, True])
         self.assertEqual(self.client.get(url).status_code, 405)  # hasło tylko w treści POST
+
+    def test_signup_enforces_password_policy(self):
+        data = {"username": "nowy", "email": "nowy@example.com"}
+        for weak in ["Krotkie1!", "bezwielkich1!", "BEZMALYCH1!", "BezCyfr!!!!", "BezSymbolu12"]:
+            r = self.client.post(reverse("signup"), {**data, "password1": weak, "password2": weak})
+            self.assertEqual(r.status_code, 200, weak)
+            self.assertTrue(r.context["form"].errors["password2"], weak)
+        self.assertFalse(User.objects.filter(username="nowy").exists())
+        # podobieństwo do nazwy użytkownika i „popularne hasła” nie są już sprawdzane
+        ok = "Nowy-nowy-1"
+        r = self.client.post(reverse("signup"), {**data, "password1": ok, "password2": ok})
+        self.assertRedirects(r, reverse("home"))
 
     def test_password_check_requires_csrf(self):
         client = self.client_class(enforce_csrf_checks=True)
@@ -205,6 +225,90 @@ class AccountTests(TestCase):
         for minutes, valid in [(59, True), (61, False)]:
             with mock.patch.object(PasswordResetTokenGenerator, "_now", return_value=start + timedelta(minutes=minutes)):
                 self.assertEqual(default_token_generator.check_token(user, token), valid, minutes)
+
+
+class RateLimitTests(TestCase):
+    """Ochrona przed celowym spamowaniem żądaniami (fruits/ratelimit.py)."""
+
+    def setUp(self):
+        from django.core.cache import caches
+
+        caches["default"].clear()
+        caches["ratelimit"].clear()
+
+    def test_global_limit_per_ip(self):
+        from unittest import mock
+
+        from . import ratelimit
+
+        with mock.patch.object(ratelimit, "GLOBAL_LIMIT", (5, 60)):
+            for _ in range(5):
+                self.assertEqual(self.client.get(reverse("how_we_rate")).status_code, 200)
+            r = self.client.get(reverse("how_we_rate"))
+            self.assertEqual(r.status_code, 429)
+            self.assertIn("Za dużo żądań", r.content.decode())
+            self.assertTrue(1 <= int(r["Retry-After"]) <= 60)
+            # inny adres IP ma własny licznik
+            self.assertEqual(self.client.get(reverse("how_we_rate"), REMOTE_ADDR="10.9.8.7").status_code, 200)
+            # sonda load balancera nigdy nie jest blokowana
+            self.assertEqual(self.client.get("/healthz/").status_code, 200)
+
+    def test_login_attempts_limited_per_username(self):
+        User.objects.create_user("ala", email="ala@example.com", password=PW)
+        for _ in range(10):
+            r = self.client.post(reverse("login"), {"username": "ala", "password": "zle-haslo"})
+            self.assertEqual(r.status_code, 200)
+        r = self.client.post(reverse("login"), {"username": "ala", "password": PW})
+        self.assertEqual(r.status_code, 429)  # nawet dobre hasło – trzeba odczekać
+        self.assertNotIn("_auth_user_id", self.client.session)
+        # inny login z tego samego IP nadal działa (limit na IP jest wyższy)
+        User.objects.create_user("ola", password=PW)
+        self.assertEqual(self.client.post(reverse("login"), {"username": "ola", "password": PW}).status_code, 302)
+
+    def test_password_reset_mails_limited_per_address(self):
+        from django.core import mail
+
+        User.objects.create_user("ala", email="ala@example.com", password=PW)
+        for _ in range(3):
+            self.client.post(reverse("password_reset"), {"email": "ala@example.com"})
+        r = self.client.post(reverse("password_reset"), {"email": "ALA@example.com"})
+        self.assertEqual(r.status_code, 429)
+        self.assertEqual(len(mail.outbox), 3)
+
+    def test_password_check_returns_json_429(self):
+        from unittest import mock
+
+        from . import ratelimit
+
+        with mock.patch.dict(ratelimit.POST_LIMITS, {"password_check": [(2, 60, "ip")]}):
+            for _ in range(2):
+                self.assertEqual(self.client.post(reverse("password_check"), {"password": "x"}).status_code, 200)
+            r = self.client.post(reverse("password_check"), {"password": "x"})
+            self.assertEqual(r.status_code, 429)
+            self.assertEqual(r.json(), {"error": "too_many_requests"})
+
+    def test_client_ip_uses_last_forwarded_for_entry(self):
+        from django.test import RequestFactory
+
+        from .ratelimit import client_ip
+
+        req = RequestFactory().get("/", HTTP_X_FORWARDED_FOR="1.2.3.4, 203.0.113.9", REMOTE_ADDR="10.0.0.5")
+        with override_settings(RATELIMIT_USE_X_FORWARDED_FOR=True):
+            self.assertEqual(client_ip(req), "203.0.113.9")  # pierwszy wpis mógł podrobić klient
+        with override_settings(RATELIMIT_USE_X_FORWARDED_FOR=False):
+            self.assertEqual(client_ip(req), "10.0.0.5")
+
+    def test_broken_cache_does_not_block_site(self):
+        from unittest import mock
+
+        from django.core.cache.backends.db import DatabaseCache
+        from django.core.cache.backends.locmem import LocMemCache
+
+        with mock.patch.object(LocMemCache, "add", side_effect=RuntimeError("cache padł")), \
+                mock.patch.object(DatabaseCache, "add", side_effect=RuntimeError("cache padł")), \
+                self.assertLogs("fruits.ratelimit", "ERROR"):
+            self.assertEqual(self.client.get(reverse("home")).status_code, 200)
+            self.assertEqual(self.client.post(reverse("password_check"), {"password": "x"}).status_code, 200)
 
 
 class CloudReadinessTests(TestCase):

@@ -4,7 +4,11 @@ Prosta strona do oceniania owoców (wzorowana na applerankings.com).
 Stack: **Python 3.12 + Django 5.2 + Pillow (zdjęcia)**; lokalnie SQLite, w Azure PostgreSQL (Container Apps).
 
 ## Funkcje
-- Rejestracja, logowanie i wylogowanie (sesje Django zapisywane w bazie, ważne 14 dni).
+- Rejestracja, logowanie i wylogowanie (sesje Django zapisywane w bazie, ważne 14 dni). Hasło: min. 10 znaków,
+  wielka i mała litera, cyfra i znak specjalny – przy rejestracji lista wymogów odhacza się na żywo.
+- „Nie pamiętasz hasła?” – link do ustawienia nowego hasła mailem (ważny 1 godzinę).
+- Limit żądań (rate limiting) chroniący przed spamowaniem: ogólny na IP oraz osobne na logowanie, rejestrację
+  i reset hasła (`fruits/ratelimit.py`); po przekroczeniu odpowiedź 429.
 - Ranking owoców pogrupowany jak na applerankings: *Najlepsze* (70+), *Przeciętne* (40–69), *Owocowe piekło* (<40), *Jeszcze nieocenione*.
 - Wyszukiwarka, filtr kategorii, menu „Wybierz owoc”.
 - Ocena owocu (tylko dla zalogowanych): 4 kryteria 0–10 (smak 40%, tekstura 25%, soczystość 20%, wygląd i aromat 15%) → wynik 0–100 z werdyktem; jedna ocena na użytkownika, można ją edytować i usuwać.
@@ -19,6 +23,7 @@ Stack: **Python 3.12 + Django 5.2 + Pillow (zdjęcia)**; lokalnie SQLite, w Azur
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python manage.py migrate
+.\.venv\Scripts\python manage.py createcachetable     # tabela cache dla limitów żądań
 .\.venv\Scripts\python manage.py load_sample_photos   # przykładowe zdjęcia (jabłko, gruszka, banan)
 .\.venv\Scripts\python manage.py createsuperuser   # konto admina
 .\.venv\Scripts\python manage.py runserver
@@ -36,7 +41,8 @@ Wdrożenie w Azure (Container Apps + PostgreSQL Flexible Server), skrypty w `dep
 ## Struktura
 - `config/` – ustawienia (zmienne środowiskowe dla chmury) i główne URL-e
 - `fruits/health.py` – sonda `/healthz/` dla load balancera
-- `fruits/management/commands/init_db.py` – migracje + przykładowe zdjęcia przy wdrożeniu
+- `fruits/ratelimit.py` – limit żądań na IP / formularz, `fruits/validators.py` – polityka haseł
+- `fruits/management/commands/init_db.py` – migracje + tabela cache + przykładowe zdjęcia przy wdrożeniu
 - `deploy/azure/` – skrypty wdrożenia w Azure
 - `fruits/models.py` – Category, Fruit, Rating, Comment + logika wyniku i werdyktów
 - `fruits/views.py` – ranking, szczegóły owocu, ocenianie, komentarze, rejestracja, profil
