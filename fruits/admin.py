@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.templatetags.static import static
 from django.utils.html import format_html
 
-from .models import Category, Comment, Fruit, FruitImage, Rating
+from .models import Category, Comment, EmailConfirmation, Fruit, FruitImage, Rating
 
 
 def _thumb(url, size=60):
@@ -66,3 +66,18 @@ class CommentAdmin(admin.ModelAdmin):
     @admin.display(description="treść")
     def short_text(self, obj):
         return obj.text[:60]
+
+
+@admin.register(EmailConfirmation)
+class EmailConfirmationAdmin(admin.ModelAdmin):
+    """Konta czekające na kliknięcie linku z e-maila (nieaktywne). Po dobie znikają same przy kolejnej rejestracji."""
+    list_display = ("user", "email", "created_at")
+    search_fields = ("user__username", "user__email")
+    readonly_fields = ("user", "created_at")
+
+    @admin.display(description="e-mail")
+    def email(self, obj):
+        return obj.user.email
+
+    def has_add_permission(self, request):
+        return False

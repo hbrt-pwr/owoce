@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Wyślij link ponownie{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Wyślij link ponownie</h1>
+  <p>Podaj adres e-mail użyty przy rejestracji – wyślemy na niego nowy link potwierdzający konto.</p>
+  <form method="post" class="stacked">
+    {% csrf_token %}
+    <p>
+      <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+      {{ form.email }}
+      {{ form.email.errors }}
+    </p>
+    <button>Wyślij link</button>
+  </form>
+  <p><a href="{% url 'login' %}">Wróć do logowania</a></p>
+</div>
+{% endblock %}

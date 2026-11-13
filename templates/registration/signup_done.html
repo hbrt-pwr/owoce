@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Potwierdź adres e-mail{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Sprawdź skrzynkę</h1>
+  <p>Wysłaliśmy link potwierdzający{% if email %} na adres <strong>{{ email }}</strong>{% endif %}.
+     Kliknij go, żeby aktywować konto – do tego czasu nie da się na nie zalogować.</p>
+  <p>Link jest ważny przez {{ hours }} godziny. Wiadomość przychodzi od <strong>kontakt@owocownik.pl</strong>.</p>
+  <p class="muted">Nic nie przyszło? Zajrzyj do spamu albo <a href="{% url 'resend_confirmation' %}">wyślij link ponownie</a>.</p>
+</div>
+{% endblock %}

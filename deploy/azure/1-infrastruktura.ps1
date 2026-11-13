@@ -32,7 +32,8 @@ if (-not (Test-AzExists containerapp env show -g $Rg -n $CaEnv)) {
     Invoke-Az containerapp env create -g $Rg -n $CaEnv -l $Location --environment-mode WorkloadProfiles -o none
 }
 
-$CommonEnv = @("DJANGO_DEBUG=0", "AZURE_ACCOUNT_NAME=$Storage", "AZURE_CONTAINER=media")
+# DJANGO_RATELIMIT jawnie (domyślnie i tak 1) – żeby limit żądań dało się wyłączyć w portalu, zmieniając na 0.
+$CommonEnv = @("DJANGO_DEBUG=0", "DJANGO_RATELIMIT=1", "AZURE_ACCOUNT_NAME=$Storage", "AZURE_CONTAINER=media")
 $AcrId = Get-AzValue acr show -n $Acr --query id
 
 # Aplikację i zadanie tworzymy z publicznym obrazem testowym i tożsamością zarządzaną, a rejestr i właściwy obraz

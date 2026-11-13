@@ -1,0 +1,13 @@
+{% autoescape off %}Cześć {{ user.get_username }},
+
+ktoś (pewnie Ty) założył konto „{{ user.get_username }}” w serwisie Owocownik, podając ten adres e-mail.
+Aby potwierdzić adres i aktywować konto, otwórz ten link i kliknij „Potwierdź”:
+
+{{ url }}
+
+Link jest ważny przez {{ hours }} godziny od założenia konta. Bez potwierdzenia konto zostanie usunięte.
+Jeśli to nie Ty – nie klikaj linku i zignoruj tę wiadomość. Konto nie zostanie aktywowane,
+a Twój adres nie będzie z nim powiązany.
+
+Owocownik
+{% endautoescape %}

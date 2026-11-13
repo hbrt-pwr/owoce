@@ -16,6 +16,13 @@ PW = "Owocowe-Haslo-123"
 SCORES = {"taste": 9, "texture": 8, "juiciness": 7, "look": 6, "review": "Pyszne"}
 
 
+def _confirmation_link(index=-1):
+    """Link potwierdzający z (domyślnie ostatniego) wysłanego e-maila."""
+    from django.core import mail
+
+    return next(line.strip() for line in mail.outbox[index].body.splitlines() if "/rejestracja/potwierdz/" in line)
+
+
 class FruitSiteTests(TestCase):
     def setUp(self):
         self.fruit = Fruit.objects.get(slug="jablko")  # z migracji 0002
@@ -34,10 +41,12 @@ class FruitSiteTests(TestCase):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         self.assertContains(self.client.get(reverse("home") + "?kategoria=cytrusowe"), "Cytryna")
 
-    def test_signup_logs_in(self):
+    def test_signup_logs_in_only_after_email_confirmation(self):
         r = self.client.post(reverse("signup"), {"username": "nowy", "email": "nowy@example.com",
                                                  "password1": PW, "password2": PW})
-        self.assertRedirects(r, reverse("home"))
+        self.assertRedirects(r, reverse("signup_done"))
+        self.assertNotContains(self.client.get(reverse("home")), "Wyloguj")
+        self.client.post(_confirmation_link())
         self.assertContains(self.client.get(reverse("home")), "Wyloguj")
 
     def test_site_name_is_owocownik(self):
@@ -175,7 +184,7 @@ class AccountTests(TestCase):
         # podobieństwo do nazwy użytkownika i „popularne hasła” nie są już sprawdzane
         ok = "Nowy-nowy-1"
         r = self.client.post(reverse("signup"), {**data, "password1": ok, "password2": ok})
-        self.assertRedirects(r, reverse("home"))
+        self.assertRedirects(r, reverse("signup_done"))
 
     def test_password_check_requires_csrf(self):
         client = self.client_class(enforce_csrf_checks=True)
@@ -225,6 +234,152 @@ class AccountTests(TestCase):
         for minutes, valid in [(59, True), (61, False)]:
             with mock.patch.object(PasswordResetTokenGenerator, "_now", return_value=start + timedelta(minutes=minutes)):
                 self.assertEqual(default_token_generator.check_token(user, token), valid, minutes)
+
+
+class EmailConfirmationTests(TestCase):
+    """Potwierdzanie adresu e-mail przy rejestracji (fruits/accounts.py)."""
+
+    DATA = {"username": "nowy", "email": "nowy@example.com", "password1": PW, "password2": PW}
+
+    def signup(self, **extra):
+        return self.client.post(reverse("signup"), {**self.DATA, **extra})
+
+    def test_signup_sends_confirmation_from_kontakt_and_account_is_inactive(self):
+        from django.core import mail
+
+        r = self.signup()
+        self.assertRedirects(r, reverse("signup_done"))
+        self.assertContains(self.client.get(reverse("signup_done")), "nowy@example.com")
+        user = User.objects.get(username="nowy")
+        self.assertFalse(user.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+        msg = mail.outbox[0]
+        self.assertEqual(msg.subject, "Owocownik – potwierdź adres e-mail")
+        self.assertEqual(msg.from_email, "Owocownik <kontakt@owocownik.pl>")
+        self.assertEqual(msg.to, ["nowy@example.com"])
+        self.assertTrue(_confirmation_link().startswith("http://testserver/rejestracja/potwierdz/"))
+        self.assertFalse(self.client.login(username="nowy", password=PW))
+
+    def test_login_before_confirmation_explains_and_links_resend(self):
+        self.signup()
+        r = self.client.post(reverse("login"), {"username": "nowy", "password": PW})
+        self.assertContains(r, "Konto nie jest jeszcze aktywne")
+        self.assertContains(r, reverse("resend_confirmation"))
+        # złe hasło – zwykły komunikat, bez zdradzania, że konto czeka na potwierdzenie
+        r = self.client.post(reverse("login"), {"username": "nowy", "password": "Zle-haslo-123"})
+        self.assertContains(r, "Nieprawidłowa nazwa użytkownika lub hasło.")
+        self.assertNotContains(r, "nie jest jeszcze aktywne")
+
+    def test_link_opened_by_get_does_not_activate(self):
+        self.signup()
+        r = self.client.get(_confirmation_link())
+        self.assertContains(r, "Potwierdź i aktywuj konto")
+        self.assertFalse(User.objects.get(username="nowy").is_active)
+
+    def test_confirmation_activates_logs_in_and_link_is_single_use(self):
+        from .models import EmailConfirmation
+
+        self.signup()
+        link = _confirmation_link()
+        r = self.client.post(link)
+        self.assertRedirects(r, reverse("home"))
+        self.assertTrue(User.objects.get(username="nowy").is_active)
+        self.assertFalse(EmailConfirmation.objects.exists())
+        self.assertContains(self.client.get(reverse("home")), "Wyloguj")
+        self.client.post(reverse("logout"))
+        self.assertTrue(self.client.login(username="nowy", password=PW))
+        self.client.logout()
+        self.assertContains(self.client.get(link), "Link nie działa")
+
+    def test_bad_token_rejected(self):
+        self.signup()
+        link = _confirmation_link()
+        self.assertContains(self.client.post(link[:-4] + "xyz/"), "Link nie działa")
+        self.assertContains(self.client.post("/rejestracja/potwierdz/zzzz/abc-def/"), "Link nie działa")
+        self.assertFalse(User.objects.get(username="nowy").is_active)
+
+    def test_pending_email_cannot_be_registered_twice_but_resend_works(self):
+        from django.core import mail
+
+        self.signup()
+        r = self.signup(username="ktos-inny")
+        self.assertFormError(r.context["form"], "email",
+                             "Na ten adres wysłaliśmy już link potwierdzający – sprawdź skrzynkę (także spam) "
+                             "albo wyślij link ponownie.")
+        self.assertContains(r, reverse("resend_confirmation"))
+        r = self.client.post(reverse("resend_confirmation"), {"email": "NOWY@example.com"})
+        self.assertRedirects(r, reverse("signup_done"))
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(mail.outbox[1].to, ["nowy@example.com"])
+        self.client.post(_confirmation_link())
+        self.assertTrue(User.objects.get(username="nowy").is_active)
+
+    def test_resend_for_unknown_or_active_address_sends_nothing_but_looks_the_same(self):
+        from django.core import mail
+
+        User.objects.create_user("ala", email="ala@example.com", password=PW)
+        for email in ["nikt@example.com", "ala@example.com"]:
+            r = self.client.post(reverse("resend_confirmation"), {"email": email})
+            self.assertRedirects(r, reverse("signup_done"))
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_expired_unconfirmed_account_is_removed_and_frees_email(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import EmailConfirmation
+
+        self.signup(username="intruz")  # ktoś wpisał cudzy adres
+        link = _confirmation_link()
+        EmailConfirmation.objects.update(created_at=timezone.now() - timedelta(hours=25))
+        self.assertContains(self.client.post(link), "Link nie działa")
+        r = self.signup()  # właściciel adresu zakłada konto po dobie
+        self.assertRedirects(r, reverse("signup_done"))
+        self.assertFalse(User.objects.filter(username="intruz").exists())
+        self.assertEqual(User.objects.get(email__iexact="nowy@example.com").username, "nowy")
+
+    def test_token_expires_after_a_day(self):
+        from datetime import datetime, timedelta
+        from unittest import mock
+
+        from django.contrib.auth.tokens import PasswordResetTokenGenerator
+
+        from .accounts import confirmation_token
+
+        user = User.objects.create_user("x", email="x@example.com", password=PW, is_active=False)
+        start = datetime(2026, 11, 13, 12, 0, 0)
+        with mock.patch.object(PasswordResetTokenGenerator, "_now", return_value=start):
+            token = confirmation_token.make_token(user)
+        for hours, valid in [(23, True), (25, False)]:
+            with mock.patch.object(PasswordResetTokenGenerator, "_now", return_value=start + timedelta(hours=hours)):
+                self.assertEqual(confirmation_token.check_token(user, token), valid, hours)
+
+    def test_admin_deactivated_account_is_not_purged_or_resent(self):
+        from django.core import mail
+
+        User.objects.create_user("zablokowany", email="ban@example.com", password=PW, is_active=False)
+        self.signup(username="inny", email="inny@example.com")
+        self.assertTrue(User.objects.filter(username="zablokowany").exists())
+        self.client.post(reverse("resend_confirmation"), {"email": "ban@example.com"})
+        self.assertEqual(len(mail.outbox), 1)  # tylko mail z rejestracji „inny”
+
+    def test_smtp_failure_leaves_no_account(self):
+        from smtplib import SMTPException
+        from unittest import mock
+
+        with mock.patch("django.core.mail.EmailMessage.send", side_effect=SMTPException("brak")):
+            r = self.signup()
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Nie udało się wysłać e-maila")
+        self.assertFalse(User.objects.filter(username="nowy").exists())
+
+    def test_password_reset_does_not_work_for_unconfirmed_account(self):
+        from django.core import mail
+
+        self.signup()
+        self.client.post(reverse("password_reset"), {"email": "nowy@example.com"})
+        self.assertEqual(len(mail.outbox), 1)  # tylko mail potwierdzający
 
 
 class RateLimitTests(TestCase):

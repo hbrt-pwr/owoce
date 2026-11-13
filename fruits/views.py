@@ -1,15 +1,25 @@
+import logging
+from smtplib import SMTPException
+
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, password_validation
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Avg, Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.http import require_POST
 
-from .forms import CommentForm, RatingForm, SignUpForm
-from .models import CRITERIA, VERDICTS, Category, Comment, Fruit, Rating, tier_for, verdict_for
+from . import accounts
+from .forms import CommentForm, RatingForm, ResendConfirmationForm, SignUpForm
+from .models import CRITERIA, VERDICTS, Category, Comment, EmailConfirmation, Fruit, Rating, tier_for, verdict_for
+
+log = logging.getLogger(__name__)
 
 
 def _with_stats(qs):
@@ -148,15 +158,72 @@ def delete_comment(request, pk):
 
 
 def signup(request):
+    """Rejestracja: konto powstaje nieaktywne, aktywuje je dopiero link z e-maila (fruits/accounts.py)."""
     if request.user.is_authenticated:
         return redirect("home")
+    if request.method == "POST":
+        accounts.purge_expired()  # zwalnia nazwy i adresy z niepotwierdzonych kont, którym wygasł link
     form = SignUpForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        user = form.save()
-        login(request, user)
-        messages.success(request, f"Witaj, {user.username}! Konto utworzone.")
-        return redirect("home")
+        try:
+            with transaction.atomic():  # bez wysłanego maila nie zostawiamy martwego konta
+                user = form.save()
+                accounts.start_confirmation(user)
+                accounts.send_confirmation_email(request, user)
+        except (SMTPException, OSError):
+            log.exception("Nie udało się wysłać e-maila potwierdzającego rejestrację")
+            messages.error(request, "Nie udało się wysłać e-maila z linkiem potwierdzającym. Spróbuj za kilka minut.")
+        else:
+            request.session["signup_email"] = user.email
+            return redirect("signup_done")
     return render(request, "registration/signup.html", {"form": form})
+
+
+def signup_done(request):
+    return render(request, "registration/signup_done.html", {
+        "email": request.session.get("signup_email"),
+        "hours": settings.ACCOUNT_CONFIRMATION_TIMEOUT // 3600,
+    })
+
+
+def resend_confirmation(request):
+    """Ponowne wysłanie linku. Odpowiedź zawsze ta sama – nie zdradza, czy adres jest w bazie."""
+    form = ResendConfirmationForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        accounts.purge_expired()
+        user = accounts.pending_users().filter(email__iexact=form.cleaned_data["email"]).first()
+        if user is not None:
+            try:
+                accounts.send_confirmation_email(request, user)
+            except (SMTPException, OSError):
+                log.exception("Nie udało się ponownie wysłać e-maila potwierdzającego")
+                messages.error(request, "Nie udało się wysłać e-maila. Spróbuj za kilka minut.")
+                return render(request, "registration/resend_confirmation.html", {"form": form})
+        messages.info(request, "Jeśli na ten adres czeka niepotwierdzone konto, wysłaliśmy na niego nowy link.")
+        request.session["signup_email"] = form.cleaned_data["email"]
+        return redirect("signup_done")
+    return render(request, "registration/resend_confirmation.html", {"form": form})
+
+
+def confirm_email(request, uidb64, token):
+    """Link z e-maila. GET pokazuje tylko przycisk – skanery linków w poczcie (otwierające adresy
+    automatycznie) nie aktywują konta. Konto aktywuje dopiero POST po kliknięciu przycisku."""
+    try:
+        user = accounts.pending_users().get(pk=force_str(urlsafe_base64_decode(uidb64)))
+    except (ValueError, OverflowError, User.DoesNotExist):
+        user = None
+    valid = user is not None and accounts.confirmation_token.check_token(user, token)
+    if not valid:
+        return render(request, "registration/confirm_email.html", {"valid": False})
+    if request.method == "POST":
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+        EmailConfirmation.objects.filter(user=user).delete()
+        request.session.pop("signup_email", None)
+        login(request, user)
+        messages.success(request, f"Witaj, {user.username}! Adres e-mail potwierdzony, konto aktywne.")
+        return redirect("home")
+    return render(request, "registration/confirm_email.html", {"valid": True, "confirm_user": user})
 
 
 @require_POST

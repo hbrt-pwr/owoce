@@ -183,3 +183,21 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"{self.user} o {self.fruit}: {self.text[:40]}"
+
+
+class EmailConfirmation(models.Model):
+    """Konto czekające na potwierdzenie adresu e-mail (link z wiadomości po rejestracji).
+
+    Do czasu potwierdzenia konto ma is_active=False, więc nie da się na nie zalogować ani zresetować hasła.
+    Wpis odróżnia takie konto od konta zablokowanego przez admina – usuwamy tylko niepotwierdzone,
+    i to dopiero po wygaśnięciu linku (żeby ktoś, kto wpisał cudzy adres, nie blokował go na stałe).
+    """
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="email_confirmation")
+    created_at = models.DateTimeField("utworzono", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "niepotwierdzony e-mail"
+        verbose_name_plural = "niepotwierdzone e-maile"
+
+    def __str__(self):
+        return f"{self.user} <{self.user.email}>"

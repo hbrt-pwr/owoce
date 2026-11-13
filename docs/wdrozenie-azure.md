@@ -105,9 +105,16 @@ subdomena / www – weryfikacja CNAME) i dopisuje adresy do `DJANGO_ALLOWED_HOST
 Przy domenie głównej usuń w panelu domyślne rekordy A/AAAA dla `@` (np. strona parkingowa rejestratora); rekordów
 poczty (MX, TXT SPF) nie ruszaj. Pauza (`pauza.ps1`) nie zmienia adresu IP – środowisko zostaje.
 
-### Poczta – reset hasła (krok 5)
+### Poczta – potwierdzenie e-maila i reset hasła (krok 5)
 
-Link „Nie pamiętasz hasła?” (ważny 1 godzinę) wysyłamy przez skrzynkę `kontakt@owocownik.pl` w home.pl (SMTP).
+Przez skrzynkę `kontakt@owocownik.pl` w home.pl (SMTP) wysyłamy:
+- **link potwierdzający adres po rejestracji** (ważny 24 godziny) – do jego kliknięcia konto jest nieaktywne
+  (nie da się zalogować ani zresetować hasła). Niepotwierdzone konto z wygasłym linkiem jest usuwane przy kolejnej
+  rejestracji, więc kto wpisze cudzy adres, nie zablokuje go na stałe. Konta czekające na potwierdzenie widać
+  w panelu admina („Niepotwierdzone e-maile”). Konta założone przed tą zmianą działają bez potwierdzania;
+- link „Nie pamiętasz hasła?” (ważny 1 godzinę).
+
+Bez działającego SMTP nie da się założyć konta – rejestracja kończy się komunikatem o błędzie wysyłki.
 Nazwę serwera SMTP (`serwerXXXXXX.home.pl`) podaje panel home.pl przy konfiguracji programu pocztowego.
 
 ```powershell
@@ -138,5 +145,5 @@ Subskrypcja Azure for Students często nie ma wolnych serwerów PostgreSQL w Pol
 - Kontener `media` pozwala czytać pojedyncze pliki po adresie (zdjęcia owoców są publiczne), ale nie listować zawartości.
 - Brak WAF (Azure Front Door / Application Gateway WAF to ok. 35+ USD/mies.). Zamiast niego limit żądań w aplikacji
   (`fruits/ratelimit.py`): ogólny 600 żądań/min na IP (pamięć procesu) i limity formularzy we wspólnym cache
-  w PostgreSQL (logowanie 10/5 min na konto, reset hasła 3/h na adres e-mail itd.). Adres klienta = ostatni wpis
+  w PostgreSQL (logowanie 10/5 min na konto, reset hasła i ponowne wysłanie linku potwierdzającego 3/h na adres e-mail itd.). Adres klienta = ostatni wpis
   `X-Forwarded-For` dopisany przez ingress. Wyłączenie awaryjne: zmienna `DJANGO_RATELIMIT=0`.

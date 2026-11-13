@@ -136,6 +136,8 @@ else:
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "Owocownik <kontakt@owocownik.pl>")
 # Link „Nie pamiętasz hasła?” jest ważny godzinę (domyślnie w Django 3 dni).
 PASSWORD_RESET_TIMEOUT = 60 * 60
+# Link potwierdzający adres e-mail po rejestracji – ważny dobę, potem niepotwierdzone konto jest usuwane.
+ACCOUNT_CONFIRMATION_TIMEOUT = 60 * 60 * 24
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"

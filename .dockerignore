@@ -1,11 +1,15 @@
 .git
 .venv
+**/.venv
 __pycache__
+**/__pycache__
 *.pyc
+**/*.pyc
 db.sqlite3
 media
 staticfiles
 .env
+.claude
 docs
 deploy
 CLAUDE.md

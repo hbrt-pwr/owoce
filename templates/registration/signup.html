@@ -16,8 +16,9 @@
     <p>
       <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
       {{ form.email }}
-      <span class="helptext">Potrzebny, gdy zapomnisz hasła.</span>
+      <span class="helptext">Wyślemy na niego link potwierdzający – konto zadziała po jego kliknięciu.</span>
       {{ form.email.errors }}
+      {% if form.email.errors.as_data.0.code == 'pending' %}<a href="{% url 'resend_confirmation' %}">Wyślij link ponownie</a>{% endif %}
     </p>
     <p>
       <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>

@@ -28,6 +28,8 @@ POST_LIMITS = {
     "login": [(50, 300, "ip"), (10, 300, "ip+username")],
     "admin:login": [(50, 300, "ip"), (10, 300, "ip+username")],
     "signup": [(20, 3600, "ip")],
+    "resend_confirmation": [(10, 3600, "ip"), (3, 3600, "email")],  # jak reset hasła
+    "confirm_email": [(30, 300, "ip")],
     "password_reset": [(10, 3600, "ip"), (3, 3600, "email")],  # bez zasypywania czyjejś skrzynki mailami
     "password_reset_confirm": [(30, 300, "ip")],
     "password_check": [(300, 60, "ip")],  # lista wymogów hasła sprawdza się w trakcie pisania
