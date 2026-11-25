@@ -7,7 +7,7 @@ from django.contrib.auth import login, password_validation
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Avg, Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,6 +21,16 @@ from .models import CRITERIA, VERDICTS, Category, Comment, EmailConfirmation, Fr
 
 log = logging.getLogger(__name__)
 
+def healthz(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+
+        return JsonResponse({"status": "ok"}, status=200)
+
+    except Exception:
+        log.exception("Health check nie powiódł się – problem z bazą danych")
+        return JsonResponse({"status": "error"}, status=503)
 
 def _with_stats(qs):
     return qs.annotate(avg_score=Avg("ratings__score"), num_ratings=Count("ratings", distinct=True))
