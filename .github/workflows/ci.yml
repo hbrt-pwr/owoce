@@ -38,3 +38,7 @@ jobs:
           DJANGO_DEBUG: "1"
         run: |
           python manage.py test fruits
+
+      - name: Build Docker image
+        run: |
+          docker build -t owoce:${GITHUB_SHA} .
