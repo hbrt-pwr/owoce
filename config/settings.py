@@ -24,7 +24,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
     if not DEBUG:
         raise ImproperlyConfigured("Ustaw DJANGO_SECRET_KEY (produkcja nie może używać klucza deweloperskiego).")
-    SECRET_KEY = "django-insecure-local-dev-only-change-me-7f3k2l9q"
+    SECRET_KEY = "django-insecure-local-dev-only-change-me-7f3k2l9q" # nosec B105
 
 # Domena publiczna, np. owoce.example.pl (lista po przecinku).
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]")
