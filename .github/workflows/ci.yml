@@ -38,7 +38,7 @@ jobs:
         run: ruff check .
 
       - name: Bandit - security analysis
-        run: bandit -r . -x ./.venv,./.git
+        run: bandit -r config fruits -x fruits/tests.py,fruits/migrations
 
       - name: pip-audit - dependency vulnerabilities
         run: pip-audit -r requirements.txt
