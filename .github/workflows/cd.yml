@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          TAG="${GITHUB_SHA}"
+          TAG="${{ github.event.workflow_run.head_sha }}"
           IMAGE_REF="${IMAGE}:${TAG}"
 
           echo "Budowanie obrazu ${IMAGE_REF}"
