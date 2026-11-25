@@ -1,0 +1,193 @@
+
+name: Owocownik CD
+
+on:
+  workflow_run:
+    workflows: ["Owocownik CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: owoce-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+
+    # Do wdrożenia potrzebne są dane OIDC od administratora Azure.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      vars.AZURE_CLIENT_ID != '' &&
+      vars.AZURE_TENANT_ID != '' &&
+      vars.AZURE_SUBSCRIPTION_ID != ''
+
+    env:
+      RG: rg-owoce
+      ACR: acrowocefr7k2
+      IMAGE: acrowocefr7k2.azurecr.io/owoce
+      APP: owoce
+      JOB: owoce-init
+
+    steps:
+      - name: Checkout deployed commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push Docker image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${GITHUB_SHA}"
+          IMAGE_REF="${IMAGE}:${TAG}"
+
+          echo "Budowanie obrazu ${IMAGE_REF}"
+
+          az acr login --name "$ACR"
+
+          docker build --platform linux/amd64 \
+            -t "$IMAGE_REF" .
+
+          docker push "$IMAGE_REF"
+
+          echo "IMAGE_REF=$IMAGE_REF" >> "$GITHUB_ENV"
+
+      - name: Save previous application image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PREVIOUS_IMAGE=$(az containerapp show \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --query "properties.template.containers[0].image" \
+            --output tsv)
+
+          if [[ -z "$PREVIOUS_IMAGE" || "$PREVIOUS_IMAGE" == "None" ]]; then
+            echo "Nie udało się odczytać poprzedniego obrazu."
+            exit 1
+          fi
+
+          echo "PREVIOUS_IMAGE=$PREVIOUS_IMAGE" >> "$GITHUB_ENV"
+          echo "Poprzedni obraz: $PREVIOUS_IMAGE"
+
+      - name: Update migration job
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az containerapp job update \
+            --resource-group "$RG" \
+            --name "$JOB" \
+            --image "$IMAGE_REF"
+
+      - name: Run database migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Uruchamiam zadanie $JOB"
+
+          EXECUTION=$(az containerapp job start \
+            --resource-group "$RG" \
+            --name "$JOB" \
+            --query name \
+            --output tsv)
+
+          if [[ -z "$EXECUTION" || "$EXECUTION" == "None" ]]; then
+            echo "Nie udało się uruchomić zadania migracyjnego."
+            exit 1
+          fi
+
+          echo "Execution: $EXECUTION"
+
+          for i in {1..60}; do
+            STATUS=$(az containerapp job execution show \
+              --resource-group "$RG" \
+              --name "$JOB" \
+              --job-execution-name "$EXECUTION" \
+              --query properties.status \
+              --output tsv)
+
+            echo "Status migracji: $STATUS"
+
+            if [[ "$STATUS" == "Succeeded" ]]; then
+              echo "Migracje zakończone sukcesem."
+              exit 0
+            fi
+
+            if [[ "$STATUS" == "Failed" || "$STATUS" == "Stopped" || "$STATUS" == "Degraded" ]]; then
+              echo "Migracje zakończyły się błędem."
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          echo "Przekroczono czas oczekiwania na migracje."
+          exit 1
+
+      - name: Deploy application
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az containerapp update \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --image "$IMAGE_REF"
+
+      - name: Health check and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FQDN=$(az containerapp show \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)
+
+          URL="https://${FQDN}/healthz/"
+
+          echo "Sprawdzam $URL"
+
+          for i in {1..18}; do
+            if curl --fail --silent --show-error "$URL" \
+              | grep -q '"status":"ok"'; then
+              echo "Health check zakończony sukcesem."
+              exit 0
+            fi
+
+            echo "Aplikacja jeszcze nie jest gotowa. Próba $i/18."
+            sleep 10
+          done
+
+          echo "Health check nie powiódł się. Przywracam poprzedni obraz."
+
+          if az containerapp update \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --image "$PREVIOUS_IMAGE"; then
+
+            echo "Przywrócono poprzedni obraz: $PREVIOUS_IMAGE"
+          else
+            echo "UWAGA: automatyczny rollback nie powiódł się!"
+          fi
+
+          exit 1
