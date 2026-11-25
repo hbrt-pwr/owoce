@@ -9,6 +9,8 @@ db.sqlite3
 media
 staticfiles
 .env
+.env*
+!.env.example
 .claude
 docs
 deploy
