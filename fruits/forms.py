@@ -42,8 +42,8 @@ class LoginForm(AuthenticationForm):
             user = User.objects.filter(username=username, is_active=False, email_confirmation__isnull=False).first()
             if user is not None and password and user.check_password(password):
                 self.unconfirmed = True
-                raise forms.ValidationError("Konto nie jest jeszcze potwierdzone.", code="unconfirmed")
-            raise
+                raise forms.ValidationError("Konto nie jest jeszcze potwierdzone.", code="unconfirmed") from None
+            raise 
 
 
 class ResendConfirmationForm(forms.Form):
